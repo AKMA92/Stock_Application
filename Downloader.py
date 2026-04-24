@@ -1,26 +1,50 @@
 import json
-
 import requests
+import time
+import os
 
 
 class Downloader:
     stock = "https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol=AAPL&outputsize=compact&apikey=DEIN_KEY"
-    #stock2 = "https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol=TSLA&outputsize=compact&apikey=DEIN_KEY"
-    #stock3 = "https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol=MSFT&outputsize=compact&apikey=DEIN_KEY"
+    cache_file = "stock_cache.json"
 
     def __init__(self):
         pass
 
     def get_data(self):
+        # Prüfen, ob Cache-Datei existiert
+        if os.path.exists(self.cache_file):
+            file_time = os.stat(self.cache_file).st_mtime
+            current_time = time.time()
+            age = current_time - file_time
 
-        try:
-            response = requests.get(self.stock)
-            json_data = json.loads(response.text)
+            # Wenn Datei jünger als 10 Minuten ist -> Cache benutzen
+            if age < 600:
+                print("Benutze Cache-Datei")
+                with open(self.cache_file, "r") as file:
+                    return json.load(file)
 
-        except Exception as e:
-            print(e)
+        # Sonst neue Daten laden
+        retries = 4
 
-        return json_data
+        for attempt in range(retries):
+            try:
+                response = requests.get(self.stock)
+                response.raise_for_status()
+                json_data = json.loads(response.text)
 
+                # Neue Daten in Cache-Datei speichern
+                with open(self.cache_file, "w") as file:
+                    json.dump(json_data, file, indent=4)
 
+                return json_data
 
+            except Exception as e:
+                print(f"Fehler bei Versuch {attempt + 1}: {e}")
+
+                wait_time = 2 ** attempt
+                print(f"Warte {wait_time} Sekunden...")
+                time.sleep(wait_time)
+
+        print("Maximale Versuche erreicht")
+        return None
